@@ -27,7 +27,7 @@ static struct list ready_list;
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
-
+static struct list sleep_list;// sleep list   							                                                       *mostafa
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -92,12 +92,13 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
-
+  list_init (&sleep_list);														//mostafa
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  initial_thread->wakeup_time = 0;													//mostafa
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -462,13 +463,41 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->wakeup_time = 0;
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
 }
-
+void set_sleeptime(int64_t ticks){														//mostafa
+  enum intr_level curr_level = intr_disable();
+  struct thread *curr = thread_current();
+  curr->wakeup_time = ticks;
+  list_insert_ordered (&sleep_list, &curr->sleepelem, sleep_compare, NULL);
+  thread_block();
+  intr_set_level(curr_level);
+}
+bool sleep_compare(const struct list_elem *thread1, const struct list_elem *thread2, void *aux){
+  struct thread *thread1_entry = list_entry (thread1, struct thread, sleepelem);
+  struct thread *thread2_entry = list_entry (thread2, struct thread, sleepelem);
+  return thread1_entry->wakeup_time < thread2_entry->wakeup_time;
+}
+void thread_wakeup(int64_t ticks){
+  while (!list_empty(&sleep_list))
+    {
+      struct list_elem *ele;
+      struct thread *th;
+      ele= list_front (&sleep_list);
+      th = list_entry (ele, struct thread, sleepelem);
+      if (th->wakeup_time > ticks)
+        {
+          break;
+        }
+      list_remove(ele);
+      thread_unblock (th);
+    }
+}
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
    returns a pointer to the frame's base. */
 static void *
