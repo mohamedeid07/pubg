@@ -27,7 +27,8 @@ static struct list ready_list;
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
-static struct list sleep_list;// sleep list   							                                                       *mostafa
+
+static struct list sleep_list;// sleep list
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -92,13 +93,14 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
-  list_init (&sleep_list);														//mostafa
+  list_init (&sleep_list);
+
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-  initial_thread->wakeup_time = 0;													//mostafa
+  initial_thread->wakeup_time = 0;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -202,6 +204,11 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  /* Makes the current thread yield if the new thread has higher
+  prioity. */
+  if(priority > thread_current()->priority)
+  	thread_yield();
+
   return tid;
 }
 
@@ -238,8 +245,15 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  //list_push_back (&ready_list, &t->elem);
+
+  /*inserts the blocked thread in the ready list ordered by it's priority*/
+  list_insert_ordered (&ready_list, &t->elem, priority_comparator, NULL);
+
   t->status = THREAD_READY;
+
+  if (thread_current() != idle_thread )
+    thread_yield();
   intr_set_level (old_level);
 }
 
@@ -307,9 +321,13 @@ thread_yield (void)
   
   ASSERT (!intr_context ());
 
-  old_level = intr_disable ();
-  if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+  old_level = intr_disable ();  
+  if (cur != idle_thread) {
+    //list_push_back (&ready_list, &cur->elem);
+
+    /*putting current thread in ready list ordered by it's priority*/
+    list_insert_ordered (&ready_list, &cur->elem, priority_comparator, NULL);
+  }
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -336,7 +354,11 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
+  struct thread* next;
   thread_current ()->priority = new_priority;
+  next = list_entry(list_begin(&ready_list), struct thread, elem);
+  if ( next->priority > new_priority)
+    thread_yield();
 }
 
 /* Returns the current thread's priority. */
@@ -470,7 +492,8 @@ init_thread (struct thread *t, const char *name, int priority)
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
 }
-void set_sleeptime(int64_t ticks){														//mostafa
+
+void set_sleeptime(int64_t ticks){                            //mostafa
   enum intr_level curr_level = intr_disable();
   struct thread *curr = thread_current();
   curr->wakeup_time = ticks;
@@ -498,6 +521,7 @@ void thread_wakeup(int64_t ticks){
       thread_unblock (th);
     }
 }
+
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
    returns a pointer to the frame's base. */
 static void *
@@ -607,6 +631,21 @@ allocate_tid (void)
 
   return tid;
 }
+
+/* List comparator function: */
+/* Returns true iff thread (a) priority is bigger than thread (b) priority. */
+bool priority_comparator (
+    const struct list_elem *a,
+    const struct list_elem *b, void *aux)
+{
+  struct thread *ta, *tb;
+  ASSERT (a != NULL);
+  ASSERT (b != NULL);
+  ta = list_entry (a, struct thread, elem);
+  tb = list_entry (b, struct thread, elem);
+  return ta->priority > tb->priority;
+}
+
 
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */

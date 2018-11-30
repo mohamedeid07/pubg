@@ -89,10 +89,13 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
+
     struct list_elem sleepelem;
     int64_t wakeup_time;
+
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -130,9 +133,6 @@ void thread_yield (void);
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
-void set_sleeptime(int64_t ticks);
-bool sleep_compare(const struct list_elem *thread1, const struct list_elem *thread2, void *aux);
-void thread_wakeup(int64_t ticks);
 int thread_get_priority (void);
 void thread_set_priority (int);
 
@@ -140,5 +140,12 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+void set_sleeptime(int64_t ticks);
+bool sleep_compare(const struct list_elem *thread1, const struct list_elem *thread2, void *aux);
+void thread_wakeup(int64_t ticks);
+
+//comparator to order treads in the ready list
+bool priority_comparator(const struct list_elem *, const struct list_elem *, void *aux);
 
 #endif /* threads/thread.h */
