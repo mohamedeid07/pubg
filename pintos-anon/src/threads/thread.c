@@ -307,7 +307,7 @@ thread_create (const char *name, int priority,
    * immediate context switching, for thread priority scheduling. */
   if (priority > thread_current()->priority) {
     // current thread releases off its running
-    thread_yield();
+  	 thread_yield();
   }
 
   return tid;
@@ -373,7 +373,7 @@ thread_unblock (struct thread *t)
 
   t->status = THREAD_READY;
 
-  if (thread_current() != idle_thread && thread_current()->priority < t->priority )
+  if (thread_current() != idle_thread && thread_current()->priority < t->priority&&!thread_mlfqs)
     thread_yield();
 
   intr_set_level (old_level);
