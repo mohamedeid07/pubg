@@ -85,7 +85,7 @@ void thread_update_recent_cpu(struct thread *, void *aux);
 void thread_update_priority(struct thread *, void *aux);
 
 /* Helper (Auxiliary) functions */
-static bool comparator_thread_priority
+static bool comparator_greater_thread_priority
   (const struct list_elem *, const struct list_elem *, void *aux);
 
 
@@ -114,7 +114,7 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-  initial_thread->wakeup_tick = 0; // a dummy value
+  initial_thread->sleep_endtick = 0; // a dummy value
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -223,17 +223,21 @@ thread_awake (int64_t current_tick) {
   // interrupt level check
   ASSERT (intr_get_level () == INTR_OFF);
 
-  // enumerate all threads in wait queue
-  for (e = list_begin (&wait_list); e != list_end (&wait_list); e = list_next (e))
+  
+
+
+  while (!list_empty(&wait_list))
     {
-      struct thread *t = list_entry (e, struct thread, waitelem);
-      if (t->wakeup_tick <= current_tick) {
-        /* sleep is expired. awake up t */
-        t->wakeup_tick = 0;
-        list_remove (&t->waitelem);
-        // Add to run queue.
-        thread_unblock (t);
-      }
+      struct list_elem *ele;
+      struct thread *th;
+      ele= list_front (&wait_list);
+      th = list_entry (ele, struct thread, waitelem);
+      if (th->sleep_endtick > current_tick)
+        {
+          break;
+        }
+      list_remove(ele);
+      thread_unblock (th);
     }
 }
 
@@ -308,19 +312,23 @@ thread_create (const char *name, int priority,
 
   return tid;
 }
-
+bool sleep_compare(const struct list_elem *thread1, const struct list_elem *thread2, void *aux){
+  struct thread *thread1_entry = list_entry (thread1, struct thread, waitelem);
+  struct thread *thread2_entry = list_entry (thread2, struct thread, waitelem);
+  return thread1_entry->sleep_endtick < thread2_entry->sleep_endtick;
+}
 /* Make the current thread T to sleep, until the timer ticks
    reaches 'ticks_end'.
    It subsequently calls thread_block(), making T sleep actually.
    This function must be called with interrupts turned off. */
 void
-thread_sleep_till_wakeup (int64_t ticks_end)
+thread_sleep_until (int64_t ticks_end)
 {
   struct thread *t = thread_current();
-  t->wakeup_tick = ticks_end;
+  t->sleep_endtick = ticks_end;
 
   // put T into the wait queue
-  list_push_back (&wait_list, &t->waitelem);
+    list_insert_ordered (&wait_list, &t->waitelem,sleep_compare,NULL);
 
   // make the current thread block (sleeped)
   thread_block();
@@ -361,7 +369,7 @@ thread_unblock (struct thread *t)
 
   // t will turn into ready-to-run state : inserting into ready_list
   // maintaining in the non-decreasing order of thread priority
-  list_insert_ordered (&ready_list, &t->elem, comparator_thread_priority, NULL);
+  list_insert_ordered (&ready_list, &t->elem, comparator_greater_thread_priority, NULL);
 
   t->status = THREAD_READY;
 
@@ -438,7 +446,7 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread) {
     // t will turn into ready-to-run state : inserting into ready_list
-    list_insert_ordered (&ready_list, &cur->elem, comparator_thread_priority, NULL);
+    list_insert_ordered (&ready_list, &cur->elem, comparator_greater_thread_priority, NULL);
   }
   cur->status = THREAD_READY;
   schedule ();
@@ -471,13 +479,13 @@ thread_set_priority (int new_priority)
   if(thread_mlfqs) return;
   // if the current thread has no donation, then it is normal priority change request.
   struct thread *t_current = thread_current();
-  if (t_current->priority == t_current->old_priority) {
+  if (t_current->priority == t_current->original_priority) {
     t_current->priority = new_priority;
-    t_current->old_priority = new_priority;
+    t_current->original_priority = new_priority;
   }
   // otherwise, it has a donation: the original priority only should have changed
   else {
-    t_current->old_priority = new_priority;
+    t_current->original_priority = new_priority;
   }
 
   // if current thread gets its priority decreased, then yield
@@ -632,10 +640,10 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
-  t->old_priority = priority;
+  t->original_priority = priority;
   t->waiting_lock = NULL;
   list_init (&t->locks);
-  t->wakeup_tick = 0;
+  t->sleep_endtick = 0;
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -749,10 +757,12 @@ allocate_tid (void)
   return tid;
 }
 
+/* Helper function: implementations */
+
 // A comparator function for thread priority, w.r.t ready_list element.
 // returns true iff (thread a)'s priority > (thread b)'s priority.
 static bool
-comparator_thread_priority (
+comparator_greater_thread_priority (
     const struct list_elem *a,
     const struct list_elem *b, void *aux)
 {
