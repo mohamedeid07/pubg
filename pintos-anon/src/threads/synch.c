@@ -444,4 +444,3 @@ comparator_greater_sema_priority(const struct list_elem* a, const struct list_el
   ASSERT(x!=NULL && y!=NULL);
   return x->semaphore.priority > y->semaphore.priority;
 }
-

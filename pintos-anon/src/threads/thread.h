@@ -101,6 +101,8 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+    int64_t recent_cpu;        		/* Increments per ticks and recalculate per second.*/
+    int nice;                           /* Between -20 to 20.*/
   };
 
 /* If false (default), use round-robin scheduler.
