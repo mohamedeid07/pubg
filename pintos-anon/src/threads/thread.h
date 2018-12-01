@@ -82,10 +82,10 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
-    int original_priority;              /* Priority, before donation */
+    int old_priority;              	/* Priority, before donation */
     struct list_elem allelem;           /* List element for all threads list. */
     struct list_elem waitelem;          /* List element, stored in the wait_list queue */
-    int64_t sleep_endtick;              /* The tick after which the thread should awake (if the thread is in sleep) */
+    int64_t wakeup_tick;              /* The tick after which the thread should awake (if the thread is in sleep) */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element, stored in the ready_list queue */
@@ -122,7 +122,7 @@ tid_t thread_create (const char *name, int priority, thread_func *, void *);
 void thread_block (void);
 void thread_unblock (struct thread *);
 
-void thread_sleep_until (int64_t wake_tick);
+void thread_sleep_till_wakeup (int64_t wake_tick);
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);
