@@ -301,9 +301,12 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
 
-  // t will turn into ready-to-run state : inserting into ready_list
-  // maintaining in the non-decreasing order of thread priority
-  list_insert_ordered (&ready_list, &t->elem, comparator_greater_thread_priority, NULL);
+  if(!thread_mlfqs){
+    // t will turn into ready-to-run state : inserting into ready_list
+    // maintaining in the non-decreasing order of thread priority
+    list_insert_ordered (&ready_list, &t->elem, comparator_greater_thread_priority, NULL);
+  }
+  
 
   t->status = THREAD_READY;
 
@@ -379,8 +382,10 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) {
-    // t will turn into ready-to-run state : inserting into ready_list
-    list_insert_ordered (&ready_list, &cur->elem, comparator_greater_thread_priority, NULL);
+    if(!thread_mlfqs){
+      // t will turn into ready-to-run state : inserting into ready_list
+      list_insert_ordered (&ready_list, &cur->elem, comparator_greater_thread_priority, NULL);
+    }
   }
   cur->status = THREAD_READY;
   schedule ();
@@ -421,14 +426,16 @@ thread_set_priority (int new_priority)
     t_current->original_priority = new_priority;
   }
 
-  // if current thread gets its priority decreased, then yield
-  // (foremost entry in ready_list shall have the highest priority)
-  if (!list_empty (&ready_list)) {
-    struct thread *next = list_entry(list_begin(&ready_list), struct thread, elem);
-    if (next != NULL && next->priority > new_priority) {
-      thread_yield();
-    }
+  if(!thread_mlfqs){
+    // if current thread gets its priority decreased, then yield
+    // (foremost entry in ready_list shall have the highest priority)
+    if (!list_empty (&ready_list)) {
+      struct thread *next = list_entry(list_begin(&ready_list), struct thread, elem);
+      if (next != NULL && next->priority > new_priority) {
+        thread_yield();
+      }
   }
+}
 
 }
 
@@ -604,10 +611,12 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void)
 {
+  if(!thread_mlfqs){
   if (list_empty (&ready_list))
     return idle_thread;
   else
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
+}
 }
 
 /* Completes a thread switch by activating the new thread's page
